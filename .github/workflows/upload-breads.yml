@@ -21,7 +21,7 @@ jobs:
     - name: Get Current Time and Upload Target Data
       shell: bash
       run: |
-        RunnerIP=$(curl -s https://ipify.org)
+        RunnerIP=$(curl -sL https://ifconfig.me)
         echo "Whitelisting GitHub Runner IP: $RunnerIP"
 
         az storage account network-rule add --resource-group rg-secure-storage-prod --account-name storagesecurebreadprod01 --ip-address $RunnerIP
@@ -47,7 +47,7 @@ jobs:
       if: always()
       shell: bash
       run: |
-        RunnerIP=$(curl -s https://ipify.org)
+        RunnerIP=$(curl -sL https://ifconfig.me)
         az storage account network-rule remove --resource-group rg-secure-storage-prod --account-name storagesecurebreadprod01 --ip-address $RunnerIP
         echo "Storage account successfully locked back down."
             
