@@ -25,7 +25,7 @@ jobs:
         echo "Whitelisting GitHub Runner IP: $RunnerIP"
 
         az storage account network-rule add --resource-group rg-secure-storage-prod --account-name storagesecurebreadprod01 --ip-address $RunnerIP
-        sleep 20
+        sleep 50
 
         CurrentHourMYT=$(date -u -d "+8 hours" +"%H")
         FileName="bread_sales_log.csv"
