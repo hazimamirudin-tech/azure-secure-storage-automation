@@ -19,57 +19,35 @@ jobs:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
     - name: Get Current Time and Upload Target Data
-      shell: pwsh
+      shell: bash
       run: |
-        # 1. Temporarily fetch GitHub runner's public IP address
-        $RunnerIP = (Invoke-RestMethod -Uri "https://ipify.org")
-        Write-Host "Whitelisting GitHub Runner IP: $RunnerIP"
+        RunnerIP=$(curl -s https://ipify.org)
+        echo "Whitelisting GitHub Runner IP: $RunnerIP"
 
-        # 2. Open the storage firewall temporarily so GitHub can talk to it
         az storage account network-rule add --resource-group rg-secure-storage-prod --account-name storagesecurebreadprod01 --ip-address $RunnerIP
-        Start-Sleep -Seconds 20 # Wait for Azure firewall changes to propagate
+        sleep 20
 
-        # 3. Determine current Malaysia Time to decide which mock data to write
-        $CurrentHourMYT = ([System.DateTime]::UtcNow.AddHours(8)).Hour
+        CurrentHourMYT=$(date -u -d "+8 hours" +"%H")
+        FileName="bread_sales_log.csv"
 
-        # Setup file paths
-        $FileName = "bread_sales_log.csv"
+        if [ "$CurrentHourMYT" -eq 10 ]; then
+            echo "id,bread_type,quantity,sale_time" > $FileName
+            echo "1,Sourdough,2,10:00 AM" >> $FileName
+        elif [ "$CurrentHourMYT" -eq 15 ]; then
+            echo "id,bread_time,quantity,sale_time" > $FileName
+            echo "1,Cheese,3, 03:00 PM" >> $FileName
+        else
+            echo "id_bread_type,quantity,sale_time" > $FileName
+            echo "1,White Bread,5,Now" >> $FileName
+        fi
 
-        # 4. Logic to generate the specific data payload based on the clock time
-        if ($CurrentHourMYT -eq 10) {
-          # 10:00 AM Execution
-          Write-Host "Creating log for 2 Sourdough breads sold..."
-          "id,bread,type,quantity,sale_time" > $FileName
-          "1,Sourdough,2,10:00 AM" >> $FileName
-        }
-        elseif ($CurrentHourMYT -eq 15) {
-          # 3:00 PM Execution
-          Write-Hose "Creating log for 3 Cheese breads sold..."
-          "id,bread_type,quantity,sale_time" > $FileName
-          "1,Cheese,3,03:00 PM" >> $FileName
-        }
-        else {
-            # "Right Now" Manual Trigger
-            Write-Host "Manual trigger executed: Creating log for 5 White breads sold..."
-            "id,bread_type,quantity,sale_time" > $FileName
-            "1,White Bread,5,Now" >> $FileName
-        }
-
-        # 5. Upload the generated CSV data directly into your private container
-        az storage blob upload `
-          --account-name storagesecurebreadprod01 `
-          --container-name bread-inventory `
-          --name $FileName `
-          --file $FileName `
-          --auth-mode login `
-          --overwrite true
+        az storage blob upload --account-name storagesecurebreadprod01 --container-name bread-inventory --name $FileName --file $FileName --auth-mode login --overwrite true
 
     - name: Re-lock Storage Firewall (Safety Net)
       if: always()
-      shell: pwsh
+      shell: bash
       run: |
-        # Automatically removes GitHub's IP to ensure storage is completely private again
-        $RunnerIP = (Invoke-RestMethod -Uri "https://ipify.org")
-        az storage account network-rule remove --resource-gorup rg-secure-storage-prod --account-name storagesecurebreadprod01 --ip-address $RunnerIP
-        Write-Host "Storage account successfully locked back down."
+        RunnerIP=$(curl -s https://ipify.org)
+        az storage account network-rule remove --resource-group rg-secure-storage-prod --account-name storagesecurebreadprod01 --ip-address $RunnerIP
+        echo "Storage account successfully locked back down."
             
