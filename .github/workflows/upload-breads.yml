@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: '0 2 2 11 *'
     - cron: '0 7 2 11 *'
-  workflow_dispatch:
+  workflow_dispatch:   
 
 jobs:
   inject-data:
@@ -23,24 +23,31 @@ jobs:
       run: |
         RunnerIP=$(curl -sL https://ifconfig.me)
         echo "Whitelisting GitHub Runner IP: $RunnerIP"
-
+        
+        # 1. Flip the master switch to allow firewall rules to function
+        az storage account update --resource-group rg-secure-storage-prod --name storagesecurebreadprod01 --public-network-access Enabled --default-action Deny
+        
+        # 2. Add the temporary runner IP whitelist exception
         az storage account network-rule add --resource-group rg-secure-storage-prod --account-name storagesecurebreadprod01 --ip-address $RunnerIP
-        sleep 50
-
+        
+        # 3. Give Azure time to propagate the networking rule changes
+        sleep 45
+        
         CurrentHourMYT=$(date -u -d "+8 hours" +"%H")
         FileName="bread_sales_log.csv"
-
+        
         if [ "$CurrentHourMYT" -eq 10 ]; then
             echo "id,bread_type,quantity,sale_time" > $FileName
             echo "1,Sourdough,2,10:00 AM" >> $FileName
         elif [ "$CurrentHourMYT" -eq 15 ]; then
-            echo "id,bread_time,quantity,sale_time" > $FileName
-            echo "1,Cheese,3, 03:00 PM" >> $FileName
+            echo "id,bread_type,quantity,sale_time" > $FileName
+            echo "1,Cheese,3,03:00 PM" >> $FileName
         else
-            echo "id_bread_type,quantity,sale_time" > $FileName
+            echo "id,bread_type,quantity,sale_time" > $FileName
             echo "1,White Bread,5,Now" >> $FileName
         fi
 
+        # 4. Securely upload the payload using Entra ID authorization tokens
         az storage blob upload --account-name storagesecurebreadprod01 --container-name bread-inventory --name $FileName --file $FileName --auth-mode login --overwrite true
 
     - name: Re-lock Storage Firewall (Safety Net)
@@ -48,6 +55,10 @@ jobs:
       shell: bash
       run: |
         RunnerIP=$(curl -sL https://ifconfig.me)
+        
+        # 5. Clean up the firewall rule footprint
         az storage account network-rule remove --resource-group rg-secure-storage-prod --account-name storagesecurebreadprod01 --ip-address $RunnerIP
+        
+        # 6. Re-seal the storage account to a completely locked-down state
+        az storage account update --resource-group rg-secure-storage-prod --name storagesecurebreadprod01 --public-network-access Disabled
         echo "Storage account successfully locked back down."
-            
